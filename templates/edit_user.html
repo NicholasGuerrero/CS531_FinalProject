@@ -1,0 +1,11 @@
+<form method="POST" action="{{ url_for('edit_user', user_id=user.id) }}">
+    <input type="text" name="name" value="{{ user.name }}">
+    <input type="email" name="email" value="{{ user.email }}">
+    <input type="text" name="dob" value="{{ user.dob }}">
+    <input type="text" name="gender" value="{{ user.gender }}">
+    <input type="text" name="blood_type" value="{{ user.blood_type }}">
+    <input type="text" name="medical_condition" value="{{ user.medical_condition }}">
+    <input type="text" name="medication" value="{{ user.medication }}">
+
+    <button type="submit">Update User</button>
+</form>

@@ -1,0 +1,12 @@
+<!-- templates/query.html -->
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Query the Database</h1>
+<form method="post" action="{{ url_for('query_database') }}">
+    <label for="sql-code">Enter your SQL code:</label>
+    <textarea name="sql-code" id="sql-code">SELECT * FROM audit_log;</textarea>
+    <br>
+    <button type="submit">Execute</button>
+</form>
+{% endblock %}

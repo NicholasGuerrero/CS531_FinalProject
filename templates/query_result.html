@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Query Results</h1>
+<table>
+    <thead>
+        {% if table_name == 'user' %}
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>DOB</th>
+            <th>Gender</th>
+            <th>Blood Type</th>
+            <th>Medical Condition</th>
+            <th>Medication</th>
+        </tr>
+        {% elif table_name == 'audit_log' %}
+        <tr>
+            <th>ID</th>
+            <th>Datetime</th>
+            <th>Patient ID</th>
+            <th>User ID</th>
+            <th>Action Type</th>
+        </tr>
+
+        {% endif %}
+
+    </thead>
+    <tbody>
+        {% for row in results %}
+        <tr>
+            {% if table_name == 'user' %}
+            {% for value in row[:-1] %}
+            <td>{{ value }}</td>
+            {% endfor %}
+            {% elif table_name == 'audit_log' %}
+            {% for value in row %}
+            <td>{{ value }}</td>
+            {% endfor %}
+            {% endif %}
+
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,51 @@
+<body>
+    {% include 'navbar.html' %}
+    <h1>Welcome, {{ current_user.username }}!</h1>
+
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>DOB</th>
+            <th>Gender</th>
+            <th>Blood Type</th>
+            <th>Medical Condition</th>
+            <th>Medication</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.name }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.dob }}</td>
+            <td>{{ user.gender }}</td>
+            <td>{{ user.blood_type }}</td>
+            <td>{{ user.medical_condition }}</td>
+            <td>{{ user.medication }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    {% if current_user.id in audit_users %}
+    <form method="POST" action="{{ url_for('add_user') }}">
+        <input type="text" name="name" placeholder="Name">
+        <input type="text" name="email" placeholder="Email">
+        <input type="text" name="dob" placeholder="DOB">
+        <input type="text" name="gender" placeholder="Gender">
+        <input type="text" name="blood_type" placeholder="Blood Type">
+        <input type="text" name="medical_condition" placeholder="Medical Condition">
+        <input type="text" name="medication" placeholder="Medication">
+        <button type="submit">Add User</button>
+    </form>
+    {% endif %}
+
+    <div>
+        <form method="post" action="{{ url_for('tamper_audit_log') }}">
+            <input type="checkbox" id="tamper-button" name="tamper">
+            <label for="tamper-button">Simulate AuditLog Tampering</label>
+            <input type="submit" value="Submit">
+        </form>
+    </div>
+    <!-- <a href="{{ url_for('logout') }}">Logout</a> -->
+</body>
