@@ -10,6 +10,8 @@ import requests
 import json
 from buildmtree import MerkleTree
 import threading
+from genkeys import get_keys
+from crypt import encrypt, decrypt
 
 
 app = Flask(__name__)
@@ -100,7 +102,8 @@ def login():
         session['password'] = password
         user = loginUser(username)
         
-        response = requests.post('http://127.0.0.1:5001/login', data={'username': username, 'password': password})
+        # login to query server
+        # response = requests.post('http://127.0.0.1:5001/login', data={'username': username, 'password': password})
         
 
         if not user.is_allowed(data={'username': username, 'password': password}):
@@ -109,12 +112,7 @@ def login():
             if not check_password_hash(loginUser.audit_users[username], password):
                 return render_template('unauthorized.html'), 401
         else:
-
-            # conn = sqlite3.connect('instance/sqlite.db')
-            # cursor = conn.cursor()
-            # cursor.execute(f"SELECT password_hash FROM user where name='{username}'")
-            # password_hash = cursor.fetchall()[0][0]
-
+            
             response = requests.get('http://127.0.0.1:5001/get_hash', params={'username': username, 'password': password})
             payload = json.loads(response.text)
             password_hash = payload['password_hash']
@@ -137,6 +135,11 @@ def unauthorized(error):
     return render_template('401.html'), 401
 
 
+# pass the function to the template context
+@app.context_processor
+def utility_processor():
+    return dict(decrypt=decrypt)
+
 @app.route('/')
 @login_required
 def index():
@@ -146,19 +149,42 @@ def index():
     else: # show only the current user's data
         users = User.query.filter_by(name=current_user.id).all()
         createMerkelTree()
+
+        # <td>{{ user.id }}</td>
+        # <td>{{ user.name }}</td>
+        # <td>{{ user.email }}</td>
+        # <td>{{ user.dob }}</td>
+        # <td>{{ user.gender }}</td>
+        # <td>{{ user.blood_type }}</td>
+        # <td>{{ user.medical_condition }}</td>
+        # <td>{{ user.medication }}</td>
+
     return render_template('index2.html', users=users, audit_users=list(loginUser.audit_users.keys()) )
 
 
 @app.route('/add_user', methods=['POST'])
 @login_required
 def add_user():
+  
     name = request.form['name']
-    email = request.form['email']
-    dob = request.form['dob']
-    gender = request.form['gender']
-    blood_type = request.form['blood_type']
-    medical_condition = request.form['medical_condition']
-    medication = request.form['medication']
+    get_keys(name)
+    email = encrypt(request.form['email'], f'keys/{name}.pub')
+    dob = encrypt(request.form['dob'], f'keys/{name}.pub')
+    gender = encrypt(request.form['gender'], f'keys/{name}.pub')
+    blood_type = encrypt(request.form['blood_type'], f'keys/{name}.pub')
+    medical_condition = encrypt(request.form['medical_condition'], f'keys/{name}.pub')
+    medication = encrypt(request.form['medication'], f'keys/{name}.pub')
+
+
+    # name = request.form['name']
+    # email = request.form['email']
+    # dob = request.form['dob']
+    # gender = request.form['gender']
+    # blood_type = request.form['blood_type']
+    # medical_condition = request.form['medical_condition']
+    # medication = request.form['medication']
+
+
     new_user = User(name=name, email=email, dob=dob, gender=gender, blood_type=blood_type,
                     medical_condition=medical_condition, medication=medication,
                     # password_hash = generate_password_hash('user)
@@ -168,14 +194,14 @@ def add_user():
     new_user.password_hash = generate_password_hash('user' + str(new_user.id))
 
 
-    checkLogImmutability()
+    # checkLogImmutability()
 
     # create audit log entry
     log = AuditLog(patient_id=new_user.id, user_id=current_user.id, action_type='create')
     db.session.add(log)
     db.session.commit()
 
-    createMerkelTree()
+    # createMerkelTree()
 
     return redirect(url_for('index'))
 
@@ -187,23 +213,31 @@ def edit_user(user_id):
         return render_template('unauthorized.html'), 401
     if request.method == 'POST':
         user.name = request.form['name']
-        user.email = request.form['email']
-        user.dob = request.form['dob']
-        user.gender = request.form['gender']
-        user.blood_type = request.form['blood_type']
-        user.medical_condition = request.form['medical_condition']
-        user.medication = request.form['medication']
+        # user.email = request.form['email']
+        # user.dob = request.form['dob']
+        # user.gender = request.form['gender']
+        # user.blood_type = request.form['blood_type']
+        # user.medical_condition = request.form['medical_condition']
+        # user.medication = request.form['medication']
+
+        user.email = encrypt(request.form['email'], "keys/" + user.name + ".pub")
+        user.dob = encrypt(request.form['dob'], "keys/" + user.name + ".pub")
+        user.gender = encrypt(request.form['gender'], "keys/" + user.name + ".pub")
+        user.blood_type = encrypt(request.form['blood_type'], "keys/" + user.name + ".pub")
+        user.medical_condition = encrypt(request.form['medical_condition'], "keys/" + user.name + ".pub")
+        user.medication = encrypt(request.form['medication'], "keys/" + user.name + ".pub")
+
         db.session.commit()
 
 
-        checkLogImmutability()
+        # checkLogImmutability()
 
         # create audit log entry
         log = AuditLog(patient_id=user.id, user_id=current_user.id, action_type='change')
         db.session.add(log)
         db.session.commit()
 
-        createMerkelTree()
+        # createMerkelTree()
 
         return redirect(url_for('index'))
     return render_template('edit_user.html', user=user)
@@ -270,6 +304,7 @@ def query_database():
         payload = json.loads(response.text)
         results = payload['results']
 
+
         if table_name == 'audit_log':
             if current_user.id in loginUser.audit_users:
                 patient_ids = current_user.id
@@ -278,11 +313,11 @@ def query_database():
         elif table_name == 'user':
             for tup in results:
                 patient_ids = tup[0]
-
-        # audit_record = AuditLog.query.get(1)
-        # audit_record.action_type = "Tamperered With"
-        # # audit_record.action_type = "query - SELECT * FROM audit_log;"
-        # db.session.commit()
+            
+            #decrypt records
+            for i in range(len(results)):
+                for j in range(2, 8):
+                    results[i][j] = decrypt(results[i][j], "keys/" + results[i][1] + ".prv")
 
 
         # create a lock object
@@ -322,91 +357,3 @@ def tamper_audit_log():
 if __name__ == '__main__':
     app.run(port=5000)
     
-
-
-
-
-
-
-
-
-
-
-# @app.route('/query_database', methods=['GET', 'POST'])
-# @login_required
-# def query_database():
-#     if request.method == 'POST':
-#         sql_code = request.form['sql-code']
-
-#         # Extract the table name from the SQL code
-#         match = re.search(r"FROM\s+([^\s;]+)", sql_code, re.IGNORECASE)
-#         if match:
-#             table_name = match.group(1)
-#         else:
-#             table_name = None
-
-#         # Patients can query the system to monitor usage of only their own EHR data.
-#         if table_name == 'audit_log':
-#             if current_user.id not in loginUser.audit_users:
-#                 id_num = User.query.filter_by(name=current_user.id).all()[0].id
-#                 sql_code = sql_code[:-1] + ' WHERE patient_id=' + str(id_num) 
-#         elif table_name == 'user':
-#             if current_user.id not in loginUser.audit_users:
-#                 id_num = User.query.filter_by(name=current_user.id).all()[0].id
-#                 sql_code = sql_code[:-1] + ' WHERE id=' + str(id_num) 
-
-#         # Check for potentially harmful statements
-#         if re.search(r"(DROP|TRUNCATE)\s+TABLE", sql_code, re.IGNORECASE):
-#             return "Table deletion is not allowed"
-#         elif re.search(r"DELETE\s+FROM", sql_code, re.IGNORECASE):
-#             return "Record deletion is not allowed"
-#         elif re.search(r"INSERT\s+INTO", sql_code, re.IGNORECASE):
-#             return "Record insertion is not allowed"
-#         elif re.search(r"CREATE\s+TABLE", sql_code, re.IGNORECASE):
-#             return "Table creation is not allowed"
-
-#         # connect to the database
-#         conn = sqlite3.connect('./instance/sqlite.db')
-
-#         # create a cursor object
-#         cursor = conn.cursor()
-
-#         # execute the statement and fetch the results
-#         # cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-#         cursor.execute(sql_code)  # SELECT * FROM user;  SELECT * FROM audit_log;  DELETE FROM audit_log;
-#         results = cursor.fetchall()
-
-#         # close the cursor and connection
-#         cursor.close()
-#         conn.close()
-
-#         if table_name == 'audit_log':
-#             if current_user.id in loginUser.audit_users:
-#                 patient_ids = current_user.id
-#             else:
-#                 patient_ids = User.query.filter_by(name=current_user.id).all()[0].id
-#         elif table_name == 'user':
-#             # Patient ids returned in Query
-#             # patient_ids = []
-#             for tup in results:
-#                 patient_ids = tup[0]
-#             #     patient_ids.append(tup[0]) 
-
-#          # create audit log entry
-#         log = AuditLog(patient_id=str(patient_ids), user_id=current_user.id, action_type='query - ' + sql_code)
-#         db.session.add(log)
-#         db.session.commit()
-
-#         return render_template('query_result.html', results=results, table_name=table_name)
-#     return render_template('query_database.html')
-
-
-
-# if len(AuditLog.mTree.leaves) >= 3:
-        #     # Check Consistency of Merkel Tree to support Immutability Requirement
-        #     mTreeInput = [f"{audit_record.date_time}|{audit_record.patient_id}|{audit_record.user_id}|{audit_record.action_type}" for audit_record in AuditLog.query.all()]
-        #     bigTree = MerkleTree(mTreeInput)
-        #     subTree = AuditLog.mTree
-
-
-        #     isConsistent, proof = checkConsistency(subTree, bigTree)

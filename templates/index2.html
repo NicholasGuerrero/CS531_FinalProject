@@ -15,14 +15,17 @@
         </tr>
         {% for user in users %}
         <tr>
+
             <td>{{ user.id }}</td>
             <td>{{ user.name }}</td>
-            <td>{{ user.email }}</td>
-            <td>{{ user.dob }}</td>
-            <td>{{ user.gender }}</td>
-            <td>{{ user.blood_type }}</td>
-            <td>{{ user.medical_condition }}</td>
-            <td>{{ user.medication }}</td>
+            <td>{{ decrypt(user.email, "keys/" + user.name + ".prv") }}</td>
+            <td>{{ decrypt(user.dob, "keys/" + user.name + ".prv") }}</td>
+            <td>{{ decrypt(user.gender, "keys/" + user.name + ".prv") }}</td>
+            <td>{{ decrypt(user.blood_type, "keys/" + user.name + ".prv") }}</td>
+            <td>{{ decrypt(user.medical_condition, "keys/" + user.name + ".prv") }}</td>
+            <td>{{ decrypt(user.medication, "keys/" + user.name + ".prv") }}</td>
+
+
         </tr>
         {% endfor %}
     </table>
