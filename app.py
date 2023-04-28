@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request, session
+from flask import Flask, render_template, redirect, url_for, request, session, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -11,7 +11,8 @@ import json
 from buildmtree import MerkleTree
 import threading
 from genkeys import get_keys
-from crypt import encrypt, decrypt
+from RSAcrypt import encrypt, decrypt
+from blockchain import Blockchain, DateTimeEncoder
 
 
 app = Flask(__name__)
@@ -20,6 +21,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sqlite.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+blockchain = Blockchain()
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -30,6 +32,23 @@ class AuditLog(db.Model):
         
     mTree = None
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "date_time": self.date_time,
+            "patient_id": self.patient_id,
+            "user_id": self.user_id,
+            "action_type": self.action_type
+        }
+
+def createBlockChain():
+    #create BlockChain
+    audit_logs = AuditLog.query.all()
+    if len(audit_logs) != 0:
+        for audit_record in audit_logs:
+            blockchain.add_block(audit_record.to_dict())
+    return
+
 def createMerkelTree():
         # Create Merkel Tree
         audit_logs = AuditLog.query.all()
@@ -37,6 +56,7 @@ def createMerkelTree():
             mTreeInput = [f"{audit_record.date_time}|{audit_record.patient_id}|{audit_record.user_id}|{audit_record.action_type}" for audit_record in AuditLog.query.all()]
             mTree = MerkleTree(mTreeInput)
             AuditLog.mTree = mTree
+        return
 
 def checkLogImmutability():
     audit_logs = AuditLog.query.all()
@@ -47,6 +67,41 @@ def checkLogImmutability():
         if mTree.root.hashHex != AuditLog.mTree.root.hashHex:
             return False
     return True
+
+def manageAuditLog(log):
+    # create a lock object
+    lock = threading.Lock()
+    # acquire the lock before executing the code
+    lock.acquire()
+    try:
+        isImmutable = checkLogImmutability()
+
+        if isImmutable == False:
+            audit_record = AuditLog.query.get(1)
+            audit_record.action_type = "query - SELECT * FROM audit_log;"
+            db.session.commit()
+            return False
+        #  create audit log entry
+        db.session.add(log)
+        db.session.commit()
+
+        #recreate Merkel Tree
+        createMerkelTree()
+
+        # add audit log entry as a block to the blockchain
+        blockchain.add_block(log.to_dict())
+
+         # Post blockchain block
+        password = session.get('password')
+        block = json.dumps(log.to_dict(), sort_keys=True, cls=DateTimeEncoder)
+        response = requests.post('http://127.0.0.1:5001/add_block', data={'block' : block}, params={'username': current_user.id, 'password': password, 'block' : block})
+
+    finally:
+        # release the lock
+        lock.release()
+        if isImmutable == False:
+            return False
+        return True
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -76,12 +131,6 @@ class loginUser(UserMixin):
         self.id = username
 
     def is_allowed(self, data):
-        # conn = sqlite3.connect('instance/sqlite.db')
-        # cursor = conn.cursor()
-        # cursor.execute("SELECT name FROM user")
-        # rows = cursor.fetchall()
-        # users = [row[0] for row in rows]
-
         response = requests.get('http://127.0.0.1:5001/get_usernames', params=data)
         payload = json.loads(response.text)
         users = payload['users']
@@ -101,26 +150,27 @@ def login():
         password = request.form['password']
         session['password'] = password
         user = loginUser(username)
-        
         # login to query server
         # response = requests.post('http://127.0.0.1:5001/login', data={'username': username, 'password': password})
-        
-
         if not user.is_allowed(data={'username': username, 'password': password}):
             return render_template('unauthorized.html'), 401
         if username in loginUser.audit_users:
             if not check_password_hash(loginUser.audit_users[username], password):
                 return render_template('unauthorized.html'), 401
         else:
-            
             response = requests.get('http://127.0.0.1:5001/get_hash', params={'username': username, 'password': password})
             payload = json.loads(response.text)
             password_hash = payload['password_hash']
 
-
             if not check_password_hash(password_hash, password):
                 return render_template('unauthorized.html'), 401
         login_user(user)
+
+        # Post blockchain data
+        password = session.get('password')
+        json_blockchain = json.dumps(blockchain.to_dict()['chain'], sort_keys=True, cls=DateTimeEncoder)
+        response = requests.post('http://127.0.0.1:5001/post_blockchain', data={'blockchain' : json_blockchain}, params={'username': current_user.id, 'password': password, 'blockchain' : json_blockchain})
+
         return redirect(url_for('index'))
     return render_template('login.html')
 
@@ -145,45 +195,23 @@ def utility_processor():
 def index():
     if current_user.id == 'alice' or current_user.id == 'bob' or current_user.id == 'carl': # if superuser, show all users
         users = User.query.all()
-        createMerkelTree()
     else: # show only the current user's data
         users = User.query.filter_by(name=current_user.id).all()
-        createMerkelTree()
-
-        # <td>{{ user.id }}</td>
-        # <td>{{ user.name }}</td>
-        # <td>{{ user.email }}</td>
-        # <td>{{ user.dob }}</td>
-        # <td>{{ user.gender }}</td>
-        # <td>{{ user.blood_type }}</td>
-        # <td>{{ user.medical_condition }}</td>
-        # <td>{{ user.medication }}</td>
-
     return render_template('index2.html', users=users, audit_users=list(loginUser.audit_users.keys()) )
 
 
 @app.route('/add_user', methods=['POST'])
 @login_required
 def add_user():
-  
     name = request.form['name']
     get_keys(name)
+    print(name)
     email = encrypt(request.form['email'], f'keys/{name}.pub')
     dob = encrypt(request.form['dob'], f'keys/{name}.pub')
     gender = encrypt(request.form['gender'], f'keys/{name}.pub')
     blood_type = encrypt(request.form['blood_type'], f'keys/{name}.pub')
     medical_condition = encrypt(request.form['medical_condition'], f'keys/{name}.pub')
     medication = encrypt(request.form['medication'], f'keys/{name}.pub')
-
-
-    # name = request.form['name']
-    # email = request.form['email']
-    # dob = request.form['dob']
-    # gender = request.form['gender']
-    # blood_type = request.form['blood_type']
-    # medical_condition = request.form['medical_condition']
-    # medication = request.form['medication']
-
 
     new_user = User(name=name, email=email, dob=dob, gender=gender, blood_type=blood_type,
                     medical_condition=medical_condition, medication=medication,
@@ -193,15 +221,10 @@ def add_user():
     db.session.commit()
     new_user.password_hash = generate_password_hash('user' + str(new_user.id))
 
-
-    # checkLogImmutability()
-
-    # create audit log entry
     log = AuditLog(patient_id=new_user.id, user_id=current_user.id, action_type='create')
-    db.session.add(log)
-    db.session.commit()
-
-    # createMerkelTree()
+    isSecure = manageAuditLog(log)
+    if not isSecure:
+        return "Warning: Audit Log Tampering Detected!!!"
 
     return redirect(url_for('index'))
 
@@ -213,31 +236,19 @@ def edit_user(user_id):
         return render_template('unauthorized.html'), 401
     if request.method == 'POST':
         user.name = request.form['name']
-        # user.email = request.form['email']
-        # user.dob = request.form['dob']
-        # user.gender = request.form['gender']
-        # user.blood_type = request.form['blood_type']
-        # user.medical_condition = request.form['medical_condition']
-        # user.medication = request.form['medication']
-
         user.email = encrypt(request.form['email'], "keys/" + user.name + ".pub")
         user.dob = encrypt(request.form['dob'], "keys/" + user.name + ".pub")
         user.gender = encrypt(request.form['gender'], "keys/" + user.name + ".pub")
         user.blood_type = encrypt(request.form['blood_type'], "keys/" + user.name + ".pub")
         user.medical_condition = encrypt(request.form['medical_condition'], "keys/" + user.name + ".pub")
         user.medication = encrypt(request.form['medication'], "keys/" + user.name + ".pub")
-
         db.session.commit()
-
-
-        # checkLogImmutability()
 
         # create audit log entry
         log = AuditLog(patient_id=user.id, user_id=current_user.id, action_type='change')
-        db.session.add(log)
-        db.session.commit()
-
-        # createMerkelTree()
+        isSecure = manageAuditLog(log)
+        if not isSecure:
+            return "Warning: Audit Log Tampering Detected!!!"
 
         return redirect(url_for('index'))
     return render_template('edit_user.html', user=user)
@@ -252,13 +263,11 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
 
-
-    checkLogImmutability()
     # create audit log entry
     log = AuditLog(patient_id=user_id, user_id=current_user.id, action_type='delete')
-    db.session.add(log)
-    db.session.commit()
-    createMerkelTree()
+    isSecure = manageAuditLog(log)
+    if not isSecure:
+        return "Warning: Audit Log Tampering Detected!!!"
 
     return redirect(url_for('index'))
 
@@ -319,28 +328,10 @@ def query_database():
                 for j in range(2, 8):
                     results[i][j] = decrypt(results[i][j], "keys/" + results[i][1] + ".prv")
 
-
-        # create a lock object
-        lock = threading.Lock()
-        # acquire the lock before executing the code
-        lock.acquire()
-        try:
-            isImmutable = checkLogImmutability()
-
-            if isImmutable == False:
-                audit_record = AuditLog.query.get(1)
-                audit_record.action_type = "query - SELECT * FROM audit_log;"
-                db.session.commit()
-                return "Warning: Audit Log Tampering Detected!!!"
-            #  create audit log entry
-            log = AuditLog(patient_id=str(patient_ids), user_id=current_user.id, action_type='query - ' + sql_code)
-            db.session.add(log)
-            db.session.commit()
-
-            createMerkelTree()
-        finally:
-            # release the lock
-            lock.release()
+        log = AuditLog(patient_id=str(patient_ids), user_id=current_user.id, action_type='query - ' + sql_code)
+        isSecure = manageAuditLog(log)
+        if not isSecure:
+            return "Warning: Audit Log Tampering Detected!!!"
 
         return render_template('query_result.html', results=results, table_name=table_name)
     return render_template('query_database.html')
@@ -352,8 +343,31 @@ def tamper_audit_log():
         audit_record = AuditLog.query.get(1)
         audit_record.action_type = "Tamperered With"
         db.session.commit()
-        return redirect(url_for('query_database'))
+        return redirect(url_for('index'))
+
+
+@app.route('/blockchain', methods=['GET'])
+@login_required
+def get_blockchain():
+    return jsonify({"blockchain" : blockchain.to_dict()})
+
+
+@app.route('/MerkelTree', methods=['GET'])
+@login_required
+def get_MerkelTree():
+    return AuditLog.mTree.jsonTree
+
+@app.route('/EncryptedUsers', methods=['GET'])
+@login_required
+def get_EncryptedUsers():
+    sql_code = "SELECT * FROM user;"
+    password = session.get('password')
+    response = requests.get('http://127.0.0.1:5001/query_database', data={'sql-code': sql_code}, params={'username': current_user.id, 'password': password, 'sql-code': sql_code})
+    return json.loads(response.text)['results']
 
 if __name__ == '__main__':
+    with app.app_context():
+        createMerkelTree()
+        createBlockChain()
     app.run(port=5000)
     

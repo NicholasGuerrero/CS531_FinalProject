@@ -5,7 +5,19 @@
     <li class="nav-item">
         <a class="nav-link" href="{{ url_for('query_database') }}">Query Database</a>
     </li>
+    {% if current_user.id in audit_users %}
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('get_blockchain') }}">View Blockchain</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('get_MerkelTree') }}">View MerkelTree</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('get_EncryptedUsers') }}">View Encrypted Patient Data(RSA/AES)</a>
+    </li>
+    {% endif %}
     <li class="nav-item">
         <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
     </li>
+
 </ul>

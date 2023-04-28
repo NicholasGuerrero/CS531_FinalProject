@@ -111,7 +111,10 @@ def decrypt(ciphertext:str, private_key_str:str):
     key_prime = input_data['key_prime']
     iv = bytes.fromhex(input_data['iv'])
 
-    aes_key = bytes.fromhex(hex(mod_exp(key_prime, d, n))[2:])
+    hex_str = hex(mod_exp(key_prime, d, n))[2:]
+    if len(hex_str) % 2 != 0:
+        hex_str = '0' + hex_str
+    aes_key = bytes.fromhex(hex_str)
 
     # CBC Mode Decryption
     cbc_decipher = AES.new(aes_key, AES.MODE_CBC, iv=iv)

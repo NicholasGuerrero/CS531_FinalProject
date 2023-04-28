@@ -94,9 +94,10 @@ class MerkleTree:
     def printTree(self, current_node=None):
         if not current_node:
             current_node = self.root
-        mTree = {'content': current_node.content,
+        mTree = {
+                'content': current_node.content,
                 'hashHex' : current_node.hashHex,
-                'parent' : current_node.parent.content if current_node.parent is not None else None,
+                'parent' : current_node.parent.hashHex if current_node.parent is not None else None,
                 #  'leaves' : current_node.leaves,
                 'is_copied' : current_node.is_copied }
         if current_node.left:

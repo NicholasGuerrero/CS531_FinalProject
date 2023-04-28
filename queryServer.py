@@ -1,17 +1,10 @@
-from flask import Flask, request, redirect, url_for
-# , render_template
+from flask import Flask, request, redirect, url_for, jsonify
 from flask_login import login_required, LoginManager, UserMixin, login_user, current_user
-# , logout_user, 
-# from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash
-# , generate_password_hash
 import sqlite3
-# import datetime
-# import re
-# import pytz
-# import requests
-# from app import loginUser
 from urllib.parse import urlparse, parse_qs
+from blockchain import Blockchain, Block
+import json
 
 app = Flask(__name__)
 app.secret_key = 'secret_key'
@@ -22,6 +15,8 @@ login_manager.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+blockchain = Blockchain()
 
 class loginUser(UserMixin):
     audit_users = {
@@ -50,6 +45,7 @@ def load_user(user_id):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    print(request.method)
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -93,6 +89,10 @@ def login():
     path = urlparse(request.args['next']).path[1:]
     if path == 'query_database':
         return redirect(url_for(path, sql_code=parse.get('sql-code')[0]))
+    elif path == 'post_blockchain':
+        return redirect(url_for(path, blockchain={"blockchain" : json.loads(parse.get('blockchain')[0])}))
+    elif path == 'add_block':
+        return redirect(url_for(path, add_block={"block" : json.loads(parse.get('block')[0])}))
     return redirect(url_for(path, username=username))
 
 
@@ -152,6 +152,31 @@ def get_hash():
     return payload
 
 
+@app.route('/add_block', methods=['GET', 'POST'])
+@login_required
+def add_block():
+    data = json.loads(request.args['add_block'].replace("'", "\""))['block']
+    blockchain.add_block(data)
+    return 'Block added successfully'
+
+
+
+@app.route('/post_blockchain', methods=['GET', 'POST'])
+@login_required
+def post_blockchain():
+    blocks = json.loads(request.args['blockchain'].replace("'", "\""))
+    for block in blocks['blockchain'][1:]:
+        blockchain.add_block(block['data'])
+    return 'Block added successfully'
+
+
+
+@app.route('/blockchain', methods=['GET'])
+@login_required
+def blockchain():
+    return jsonify({"blockchain" : blockchain.to_dict()})
 
 if __name__ == '__main__':
+    with app.app_context():
+        blockchain = Blockchain()
     app.run(port=5001)

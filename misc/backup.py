@@ -383,3 +383,36 @@ if __name__ == '__main__':
 
 
         #     isConsistent, proof = checkConsistency(subTree, bigTree)
+
+
+
+
+
+
+
+
+# # create a lock object
+        # lock = threading.Lock()
+        # # acquire the lock before executing the code
+        # lock.acquire()
+        # try:
+        #     isImmutable = checkLogImmutability()
+
+        #     if isImmutable == False:
+        #         audit_record = AuditLog.query.get(1)
+        #         audit_record.action_type = "query - SELECT * FROM audit_log;"
+        #         db.session.commit()
+        #         return "Warning: Audit Log Tampering Detected!!!"
+        #     #  create audit log entry
+        #     log = AuditLog(patient_id=str(patient_ids), user_id=current_user.id, action_type='query - ' + sql_code)
+        #     db.session.add(log)
+        #     db.session.commit()
+
+        #     #recreate Merkel Tree
+        #     createMerkelTree()
+
+        #     # add audit log entry as a block to the blockchain
+        #     blockchain.add_block(log.to_dict())
+        # finally:
+        #     # release the lock
+        #     lock.release()
