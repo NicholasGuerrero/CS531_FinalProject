@@ -205,7 +205,6 @@ def index():
 def add_user():
     name = request.form['name']
     get_keys(name)
-    print(name)
     email = encrypt(request.form['email'], f'keys/{name}.pub')
     dob = encrypt(request.form['dob'], f'keys/{name}.pub')
     gender = encrypt(request.form['gender'], f'keys/{name}.pub')

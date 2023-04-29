@@ -5,6 +5,8 @@ import sqlite3
 from urllib.parse import urlparse, parse_qs
 from blockchain import Blockchain, Block
 import json
+from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 app.secret_key = 'secret_key'
@@ -98,7 +100,6 @@ def login():
 
 
 @app.route('/query_database')
-#, methods=['GET', 'POST']
 @login_required
 def query_database():
     if request.method == 'GET':
@@ -165,7 +166,14 @@ def add_block():
 @login_required
 def post_blockchain():
     blocks = json.loads(request.args['blockchain'].replace("'", "\""))
+    blocks['blockchain'][0]['timestamp'] = datetime.fromisoformat(blocks['blockchain'][0]['timestamp'].replace('Z', '+00:00'))
+    # blockchain.chain = blocks['blockchain']
+    blockchain.chain[0] = Block(blocks['blockchain'][0]['index'], 
+                                blocks['blockchain'][0]['timestamp'], 
+                                blocks['blockchain'][0]['data'],
+                                blocks['blockchain'][0]['previous_hash'])
     for block in blocks['blockchain'][1:]:
+        block['data']['date_time'] = datetime.strptime(block['data']['date_time'], '%Y-%m-%dT%H:%M:%S.%f')
         blockchain.add_block(block['data'])
     return 'Block added successfully'
 

@@ -34,7 +34,9 @@ class Blockchain:
         return Block(0, datetime.now(pytz.timezone('US/Pacific')), "Genesis Block", "0")
 
     def add_block(self, data):
-        block = Block(len(self.chain), datetime.now(pytz.timezone('US/Pacific')), data, self.chain[-1].hash)
+        # block = Block(len(self.chain), datetime.now(pytz.timezone('US/Pacific')), data, self.chain[-1].hash)
+        block = Block(len(self.chain), data['date_time'], data, self.chain[-1].hash)
+        
         self.chain.append(block)
 
     def to_dict(self):
@@ -47,5 +49,12 @@ class Blockchain:
                 "previous_hash": block.previous_hash,
                 "hash": block.hash,
             }
+            # block_dict = {
+            #     "index": block['index'],
+            #     "timestamp": block['timestamp'],
+            #     "data": block['data'],
+            #     "previous_hash": block['previous_hash'],
+            #     "hash": block['hash'],
+            # }
             chain_dict.append(block_dict)
         return {"chain": chain_dict}
